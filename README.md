@@ -1,100 +1,66 @@
-Chisel Project Template
-=======================
+# Chisel 实现的双调排序流水线
 
-You've done the [Chisel Bootcamp](https://github.com/freechipsproject/chisel-bootcamp), and now you
-are ready to start your own Chisel project.  The following procedure should get you started
-with a clean running [Chisel3](https://www.chisel-lang.org/) project.
+使用 Chisel 实现的双调排序流水线，支持：
 
-## Make your own Chisel3 project
+* UInt 类型元素排序
+* 每个元素关联一个 PAYLOAD 同步交换
+* 流水级数配置
 
-### Dependencies
+## 使用方法
 
-#### JDK 8 or newer
+### 1. 在 Chisel 项目中使用
 
-We recommend LTS releases Java 8 and Java 11. You can install the JDK as recommended by your operating system, or use the prebuilt binaries from [AdoptOpenJDK](https://adoptopenjdk.net/).
+略
 
-#### SBT or mill
+### 2. 生成 Verilog 
 
-SBT is the most common built tool in the Scala community. You can download it [here](https://www.scala-sbt.org/download.html).  
-mill is another Scala/Java build tool without obscure DSL like SBT. You can download it [here](https://github.com/com-lihaoyi/mill/releases)
+修改 `BitonicSortVerilog` 中参数，然后在sbt交互执行环境中执行 `runMain bitonicsort.BitonicSortVerilog` 。
 
-### How to get started
+输出位于`verilog-output/` 目录下
 
-#### Create a repository from the template
+## 生成器参数
 
-This repository is a Github template. You can create your own repository from it by clicking the green `Use this template` in the top right.
-Please leave `Include all branches` **unchecked**; checking it will pollute the history of your new repository.
-For more information, see ["Creating a repository from a template"](https://docs.github.com/en/free-pro-team@latest/github/creating-cloning-and-archiving-repositories/creating-a-repository-from-a-template).
+| 名称          | 含义                              |
+| ------------- | --------------------------------- |
+| N             | 参与排序的元素数量，必须为2的次方 |
+| WIDTH         | 参与排序的数字位宽                |
+| PAYLOAD_TYPE  | PAYLOAD类型                       |
+| PIPELINE_FRAC | 流水线分数                        |
 
-#### Wait for the template cleanup workflow to complete
+## IO端口定义
 
-After using the template to create your own blank project, please wait a minute or two for the `Template cleanup` workflow to run which will removes some template-specific stuff from the repository (like the LICENSE).
-Refresh the repository page in your browser until you see a 2nd commit by `actions-user` titled `Template cleanup`.
+| 名称       | 方向和类型                   | 含义                |
+| ---------- | ---------------------------- | ------------------- |
+| tagIn      | Input(UInt(8.W))             | tag 输入            |
+| numberIn   | Input(Vec(n, UInt(WIDTH.W))) | 排序数字输入        |
+| payloadIn  | Input(Vec(n, payload))       | 排序payload输入     |
+| tagOut     | Output(UInt(8.W))            | tag输出             |
+| numberOut  | Output(Vec(n, UInt(w.W)))    | 排序数字结果输出    |
+| payloadOut | Output(Vec(n, payload))      | 排序payload结果输出 |
 
+## Payload
 
-#### Clone your repository
+排序流水线的功能类比 Scala 中的 sortBy 函数，对一组输入元素（numberIn）进行排序，在排序的同时同步交换一组和输入元素一一对应的 payload。
 
-Once you have created a repository from this template and the `Template cleanup` workflow has completed, you can click the green button to get a link for cloning your repository.
-Note that it is easiest to push to a repository if you set up SSH with Github, please see the [related documentation](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/connecting-to-github-with-ssh). SSH is required for pushing to a Github repository when using two-factor authentication.
+## 流水级数
 
-```sh
-git clone git@github.com:Wolf-Tungsten/chisel-bitonic-sort.git
-cd chisel-bitonic-sort
+完全使用组合逻辑实现的双调排序会引入较高的延迟，可能导致时序不收敛。为便于适配不同设计流程，引入PIPELINE_FRAC 流水线分数参数用于配置。
+
+PIPELINE_FRAC = 0 时，排序流水线完全由组合逻辑实现。
+
+PIPELINE_FRAC 取大于 0 的整数时，输入会进入第0级流水寄存器，之后流水线会在每 PIPELINE_FRAC 层 Switch 后加入一级流水寄存器。
+
+流水线每拍可输入一组待排序数据。
+
+流水线延迟由 N 和 PIPELINE_FRAC 共同决定，具体数值可在测试或生成 Verilog 代码时获得。例如，当 N = 32，PIPELINE_FRAC = 2 时：
+
+```
+[BitonicSort] Hint: Delay = 8
 ```
 
-#### Set project organization and name in build.sbt
+## Tag
 
-The cleanup workflow will have attempted to provide sensible defaults for `ThisBuild / organization` and `name` in the `build.sbt`.
-Feel free to use your text editor of choice to change them as you see fit.
+可在输入数据时同时在 tagIn 端口输入一个自定义的 tag，该 tag 会跟随流水线传递，并与结果对应输出。
 
-#### Clean up the README.md file
 
-Again, use you editor of choice to make the README specific to your project.
 
-#### Add a LICENSE file
-
-It is important to have a LICENSE for open source (or closed source) code.
-This template repository has the Unlicense in order to allow users to add any license they want to derivative code.
-The Unlicense is stripped when creating a repository from this template so that users do not accidentally unlicense their own work.
-
-For more information about a license, check out the [Github Docs](https://docs.github.com/en/free-pro-team@latest/github/building-a-strong-community/adding-a-license-to-a-repository).
-
-#### Commit your changes
-```sh
-git commit -m 'Starting chisel-bitonic-sort'
-git push origin main
-```
-
-### Did it work?
-
-You should now have a working Chisel3 project.
-
-You can run the included test with:
-```sh
-sbt test
-```
-
-You should see a whole bunch of output that ends with something like the following lines
-```
-[info] Tests: succeeded 1, failed 0, canceled 0, ignored 0, pending 0
-[info] All tests passed.
-[success] Total time: 5 s, completed Dec 16, 2020 12:18:44 PM
-```
-If you see the above then...
-
-### It worked!
-
-You are ready to go. We have a few recommended practices and things to do.
-
-* Use packages and following conventions for [structure](https://www.scala-sbt.org/1.x/docs/Directories.html) and [naming](http://docs.scala-lang.org/style/naming-conventions.html)
-* Package names should be clearly reflected in the testing hierarchy
-* Build tests for all your work
-* Read more about testing in SBT in the [SBT docs](https://www.scala-sbt.org/1.x/docs/Testing.html)
-* This template includes a [test dependency](https://www.scala-sbt.org/1.x/docs/Library-Dependencies.html#Per-configuration+dependencies) on [chiseltest](https://github.com/ucb-bar/chisel-testers2), this is a reasonable starting point for most tests
-  * You can remove this dependency in the build.sbt file if you want to
-* Change the name of your project in the build.sbt file
-* Change your README.md
-
-## Problems? Questions?
-
-Check out the [Chisel Users Community](https://www.chisel-lang.org/community.html) page for links to get in contact!
